@@ -1,0 +1,6 @@
+@PowerplantCC.Api_HostAddress = http://localhost:8889
+
+POST {{PowerplantCC.Api_HostAddress}}/productionplan/
+Accept: application/json
+
+###
