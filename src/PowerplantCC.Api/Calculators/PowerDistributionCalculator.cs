@@ -40,40 +40,6 @@ namespace PowerplantCC.Api.Calculators
             return Result<LoadedPowerPlant[]>.Success([.. powerPlantByLoadedPowerPlant.Select(p => p.Key)]);
         }
 
-        private static void MergeUnusedPowerPlantsWithTheStartedOnce(Dictionary<LoadedPowerPlant, PowerPlant> powerPlantByLoadedPowerPlant, Dictionary<LoadedPowerPlant, PowerPlant> powerPlantsToStart)
-        {
-            foreach (var powerPlant in powerPlantByLoadedPowerPlant)
-            {
-                powerPlantsToStart.TryAdd(powerPlant.Key, powerPlant.Value);
-            }
-        }
-
-        private static void RampingUpMostEfficientPowerPlantsFirst(ProductionPlan productionPlan, Dictionary<LoadedPowerPlant, PowerPlant> powerPlantsToStart)
-        {
-            foreach (var powerplant in powerPlantsToStart)
-            {
-                var nettoPMin = powerplant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMin);
-                var nettoPMax = powerplant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMax);
-                var sumOfAppliedLoad = GetSumOfAppliedLoad(powerPlantsToStart);
-
-                if (sumOfAppliedLoad == productionPlan.Load)
-                    break;
-                else if (sumOfAppliedLoad + nettoPMax <= productionPlan.Load)
-                    powerplant.Key.PowerDelivery = nettoPMax;
-                else if (productionPlan.Load - sumOfAppliedLoad <= nettoPMax - nettoPMin)
-                    powerplant.Key.PowerDelivery += productionPlan.Load - sumOfAppliedLoad;
-            }
-        }
-
-        private static void ApplyMinPower(ProductionPlan productionPlan, Dictionary<LoadedPowerPlant, PowerPlant> powerPlantsToStart)
-        {
-            foreach (var powerplant in powerPlantsToStart)
-            {
-                var nettoPMin = powerplant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMin);
-                powerplant.Key.PowerDelivery = nettoPMin;
-            }
-        }
-
         private static Dictionary<LoadedPowerPlant, PowerPlant> FindPowerPlantsToStart(ProductionPlan productionPlan, Dictionary<LoadedPowerPlant, PowerPlant> powerPlantByLoadedPowerPlant)
         {
             // Som min power < Load < Som max power
@@ -89,18 +55,15 @@ namespace PowerplantCC.Api.Calculators
                 for (int j = i; j < powerPlantByLoadedPowerPlant.Count; j++)
                 {
                     var powerPlant = powerPlantByLoadedPowerPlant.ElementAt(j);
-                    powerPlantsToStart.Add(powerPlant.Key, powerPlant.Value);
 
-                    var pMinNetto = powerPlant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMin);
-                    var pMaxNetto = powerPlant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMax);
-
-                    somMinPower += pMinNetto;
-                    somMaxPower += pMaxNetto;
+                    somMinPower += powerPlant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMin);
+                    somMaxPower += powerPlant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMax);
 
                     // Found it!
                     if (somMinPower < productionPlan.Load
                         && productionPlan.Load < somMaxPower)
                     {
+                        powerPlantsToStart.Add(powerPlant.Key, powerPlant.Value);
                         break;
                     }
 
@@ -108,9 +71,7 @@ namespace PowerplantCC.Api.Calculators
                     if (somMinPower < productionPlan.Load
                         && productionPlan.Load > somMaxPower)
                     {
-                        somMinPower += pMinNetto;
-                        somMaxPower += pMaxNetto;
-
+                        powerPlantsToStart.Add(powerPlant.Key, powerPlant.Value);
                         continue;
                     }
 
@@ -130,9 +91,37 @@ namespace PowerplantCC.Api.Calculators
             return powerPlantsToStart!;
         }
 
-        private static decimal GetSumOfAppliedLoad(Dictionary<LoadedPowerPlant, PowerPlant> loadedPowerPlantByPowerPlant)
+        private static void RampingUpMostEfficientPowerPlantsFirst(ProductionPlan productionPlan, Dictionary<LoadedPowerPlant, PowerPlant> powerPlantsToStart)
         {
-            return loadedPowerPlantByPowerPlant.Sum(p => p.Key.PowerDelivery);
+            foreach (var powerplant in powerPlantsToStart)
+            {
+                var sumOfAppliedLoad = powerPlantsToStart.Sum(p => p.Key.PowerDelivery);
+                var nettoPMax = powerplant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMax);
+                var nettoPMin = powerplant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMin);
+
+                if (sumOfAppliedLoad == productionPlan.Load)
+                    break;
+                else if (sumOfAppliedLoad + nettoPMax <= productionPlan.Load)
+                    powerplant.Key.PowerDelivery = nettoPMax;
+                else if (productionPlan.Load - sumOfAppliedLoad <= nettoPMax - nettoPMin)
+                    powerplant.Key.PowerDelivery += productionPlan.Load - sumOfAppliedLoad;
+            }
+        }
+
+        private static void ApplyMinPower(ProductionPlan productionPlan, Dictionary<LoadedPowerPlant, PowerPlant> powerPlantsToStart)
+        {
+            foreach (var powerplant in powerPlantsToStart)
+            {
+                powerplant.Key.PowerDelivery = powerplant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMin);
+            }
+        }
+
+        private static void MergeUnusedPowerPlantsWithTheStartedOnce(Dictionary<LoadedPowerPlant, PowerPlant> powerPlantByLoadedPowerPlant, Dictionary<LoadedPowerPlant, PowerPlant> powerPlantsToStart)
+        {
+            foreach (var powerPlant in powerPlantByLoadedPowerPlant)
+            {
+                powerPlantsToStart.TryAdd(powerPlant.Key, powerPlant.Value);
+            }
         }
     }
 }
