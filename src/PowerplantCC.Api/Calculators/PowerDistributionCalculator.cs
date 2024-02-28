@@ -1,16 +1,27 @@
-﻿using PowerplantCC.Api.Dtos;
+﻿using PowerplantCC.Api.Common;
+using PowerplantCC.Api.Dtos;
 using PowerplantCC.Api.Models;
+
 namespace PowerplantCC.Api.Calculators
 {
     public static class PowerDistributionCalculator
     {
-        public static LoadedPowerPlant[] Invoke(ProductionPlan productionPlan)
+        public static Result<LoadedPowerPlant[]> Invoke(ProductionPlan productionPlan)
         {
+            // Validation
+            if (productionPlan is null)
+                return Result<LoadedPowerPlant[]>.Error(new ArgumentNullException(nameof(productionPlan)));
+
+            var validateResult = productionPlan.Validate();
+            if (!validateResult.IsSuccess)
+                return Result<LoadedPowerPlant[]>.Error(validateResult.Exception!);
+
+            // Init return value
             var loadedPowerPlants = productionPlan.PowerPlants
                 .Select(p => new LoadedPowerPlant(p.Name))
                 .ToArray();
 
-            // Get Unit efficiency
+            // Get unit efficiency
             var efficiencyOrderedPowerPlants = productionPlan.PowerPlants
                 .OrderByDescending(p => p.GetUnitEfficiency(productionPlan.Fuels))
                 .ToArray();
@@ -20,7 +31,9 @@ namespace PowerplantCC.Api.Calculators
 
             // Handle equal load
 
-            return [.. loadedPowerPlants.OrderByDescending(p => p.PowerDelivery)];
+
+            return Result<LoadedPowerPlant[]>.Success(
+                [.. loadedPowerPlants.OrderByDescending(p => p.PowerDelivery)]);
         }
     }
 }

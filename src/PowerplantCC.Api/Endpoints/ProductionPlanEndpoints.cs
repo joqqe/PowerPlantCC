@@ -8,7 +8,15 @@ namespace PowerplantCC.Api.Endpoints
         public static WebApplication MapProductionPlanEndpoints(this WebApplication app)
         {
             app.MapPost("/productionplan", (ProductionPlan productionPlan) => {
-                return PowerDistributionCalculator.Invoke(productionPlan);
+                var result = PowerDistributionCalculator.Invoke(productionPlan);
+
+                if (!result.IsSuccess)
+                    return Results.BadRequest(result.Exception!.Message);
+
+                if (result?.Value?.Length is null or 0)
+                    return Results.NoContent();
+
+                return Results.Ok(result.Value);
             })
             .WithName("GetProductionPlan")
             .WithOpenApi();
