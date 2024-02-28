@@ -37,7 +37,16 @@
 
         public static decimal GetUnitEfficiency(this PowerPlant powerPlant, Fuels fuels)
         {
-            return powerPlant.Efficiency / powerPlant.GetFuelCost(fuels);
+            return powerPlant.GetFuelType() == FuelType.Wind
+                ? decimal.MaxValue
+                : powerPlant.Efficiency / powerPlant.GetFuelCost(fuels);
+        }
+
+        public static decimal GetNettoLoad(this PowerPlant powerPlant, Fuels fuels, Func<PowerPlant, decimal> action)
+        {
+            return powerPlant.GetFuelType() == FuelType.Wind
+                ? action(powerPlant) * (fuels.WindPercentage / 100)
+                : action(powerPlant);
         }
     }
 }

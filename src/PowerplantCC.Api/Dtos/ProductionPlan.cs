@@ -11,10 +11,6 @@ namespace PowerplantCC.Api.Dtos
 
         public Result Validate()
         {
-            // Load
-            if (Load < 0)
-                return Result.Error(new ArgumentOutOfRangeException(nameof(Load)));
-
             // Fuels
             if (Fuels is null)
                 return Result.Error(new ArgumentNullException(nameof(Fuels)));
@@ -32,6 +28,13 @@ namespace PowerplantCC.Api.Dtos
                 .FirstOrDefault(r => !r.IsSuccess);
             if (firstInvalidPowerPlantValidateResult is not null)
                 return Result.Error(firstInvalidPowerPlantValidateResult.Exception!);
+
+            // Load
+            if (Load < 0)
+                return Result.Error(new ArgumentOutOfRangeException(nameof(Load)));
+
+            if (Load > PowerPlants.Sum(p => p.PMax))
+                return Result.Error(new ArgumentOutOfRangeException("Load should be lower or equal then can be produced."));
 
             return Result.Success();
         }

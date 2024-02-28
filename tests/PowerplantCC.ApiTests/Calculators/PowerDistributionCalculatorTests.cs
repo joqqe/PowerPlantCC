@@ -2,7 +2,7 @@ using PowerplantCC.Api.Dtos;
 using PowerplantCC.Api.Models;
 using PowerplantCC.Api.Calculators;
 
-namespace PowerplantCC.ApiTests
+namespace PowerplantCC.ApiTests.Calculators
 {
     public class PowerDistributionCalculatorTests
     {
@@ -20,7 +20,7 @@ namespace PowerplantCC.ApiTests
                         Co2Price = 20m,
                         WindPercentage = 60m
                     },
-                    PowerPlants = 
+                    PowerPlants =
                     [
                         new PowerPlant
                         {
@@ -113,9 +113,16 @@ namespace PowerplantCC.ApiTests
             ProductionPlan productionPlan, LoadedPowerPlant[] expectedLoadedPowerPlants)
         {
             // act
-            LoadedPowerPlant[] actualLoadedPowerPlants = PowerDistributionCalculator.Invoke(productionPlan);
+            var result = PowerDistributionCalculator.Invoke(productionPlan);
+
+            PowerDistributionCalculator.Invoke(productionPlan);
 
             // assert
+            if (!result.IsSuccess)
+                Assert.Fail(result.Exception!.Message);
+
+            LoadedPowerPlant[] actualLoadedPowerPlants = result.Value!;
+
             Assert.Equal(expectedLoadedPowerPlants.Length, actualLoadedPowerPlants.Length);
             for (int i = 0; i < expectedLoadedPowerPlants.Length; i++)
             {

@@ -6,6 +6,8 @@ namespace PowerplantCC.Api.Calculators
 {
     public static class PowerDistributionCalculator
     {
+        const int CalculateRunLimit = 4;
+
         public static Result<LoadedPowerPlant[]> Invoke(ProductionPlan productionPlan)
         {
             // Validation
@@ -16,24 +18,53 @@ namespace PowerplantCC.Api.Calculators
             if (!validateResult.IsSuccess)
                 return Result<LoadedPowerPlant[]>.Error(validateResult.Exception!);
 
-            // Init return value
-            var loadedPowerPlants = productionPlan.PowerPlants
-                .Select(p => new LoadedPowerPlant(p.Name))
-                .ToArray();
-
             // Get unit efficiency
-            var efficiencyOrderedPowerPlants = productionPlan.PowerPlants
+            var loadedPowerPlantByPowerPlant = productionPlan.PowerPlants
                 .OrderByDescending(p => p.GetUnitEfficiency(productionPlan.Fuels))
-                .ToArray();
+                .ToDictionary<PowerPlant, LoadedPowerPlant>(p => new LoadedPowerPlant(p.Name));
 
-            // Load most efficient powerplants first
+            for (int i = 0; i < CalculateRunLimit; i++)
+            {
+                var sumOfAppliedLoad = 0m;
+
+                // Apply most efficient powerplants first
+                foreach (KeyValuePair<LoadedPowerPlant, PowerPlant> item in loadedPowerPlantByPowerPlant)
+                {
+                    sumOfAppliedLoad = GetSumOfAppliedLoad(loadedPowerPlantByPowerPlant);
+                    if (sumOfAppliedLoad >= productionPlan.Load)
+                        break;
+
+                    var nettoPMin = item.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMin);
+                    var nettoPMax = item.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMax);
+
+                    // Apply max powerplant power
+                    if (sumOfAppliedLoad + nettoPMax <= productionPlan.Load)
+                        item.Key.PowerDelivery += nettoPMax;
+                    // Apply partial powerplant power
+                    else if (sumOfAppliedLoad + nettoPMin <= productionPlan.Load
+                        && sumOfAppliedLoad + nettoPMax >= productionPlan.Load)
+                        item.Key.PowerDelivery = productionPlan.Load - sumOfAppliedLoad;
+                    // Apply more due to high PMin
+                    else if(sumOfAppliedLoad + nettoPMin <= productionPlan.Load)
+                        item.Key.PowerDelivery += nettoPMin;
+                }
+
+                // Apply rest load
 
 
-            // Handle equal load
-
+            }
 
             return Result<LoadedPowerPlant[]>.Success(
-                [.. loadedPowerPlants.OrderByDescending(p => p.PowerDelivery)]);
+                [
+                    .. loadedPowerPlantByPowerPlant
+                        .Select(p => p.Key)
+                        //.OrderByDescending(p => p.PowerDelivery)
+                ]);
+        }
+
+        private static decimal GetSumOfAppliedLoad(Dictionary<LoadedPowerPlant, PowerPlant> loadedPowerPlantByPowerPlant)
+        {
+            return loadedPowerPlantByPowerPlant.Sum(p => p.Key.PowerDelivery);
         }
     }
 }
