@@ -6,8 +6,6 @@ namespace PowerplantCC.Api.Calculators
 {
     public static class PowerDistributionCalculator
     {
-        const int CalculateRunLimit = 4;
-
         public static Result<LoadedPowerPlant[]> Invoke(ProductionPlan productionPlan)
         {
             // Validation
@@ -19,47 +17,117 @@ namespace PowerplantCC.Api.Calculators
                 return Result<LoadedPowerPlant[]>.Error(validateResult.Exception!);
 
             // Get unit efficiency
-            var loadedPowerPlantByPowerPlant = productionPlan.PowerPlants
+            var powerPlantByLoadedPowerPlant = productionPlan.PowerPlants
                 .OrderByDescending(p => p.GetUnitEfficiency(productionPlan.Fuels))
                 .ToDictionary<PowerPlant, LoadedPowerPlant>(p => new LoadedPowerPlant(p.Name));
 
-            for (int i = 0; i < CalculateRunLimit; i++)
+            // Find PowerPlant to start
+            var powerPlantsToStart = FindPowerPlantsToStart(productionPlan, powerPlantByLoadedPowerPlant);
+
+            if (powerPlantsToStart?.Count is null or 0)
+                return Result<LoadedPowerPlant[]>.Error(
+                    new Exception("No combination of the power plants will result in the production of the required load."));
+
+            // Apply min power to all powerplants to start
+            ApplyMinPower(productionPlan, powerPlantsToStart);
+
+            // Ramp up most efficient power plants first until load is reached
+            RampingUpMostEfficientPowerPlantsFirst(productionPlan, powerPlantsToStart);
+
+            // Merge powerPlantByLoadedPowerPlant with powerPlantsToStart
+            MergeUnusedPowerPlantsWithTheStartedOnce(powerPlantByLoadedPowerPlant, powerPlantsToStart);
+
+            return Result<LoadedPowerPlant[]>.Success([.. powerPlantByLoadedPowerPlant.Select(p => p.Key)]);
+        }
+
+        private static void MergeUnusedPowerPlantsWithTheStartedOnce(Dictionary<LoadedPowerPlant, PowerPlant> powerPlantByLoadedPowerPlant, Dictionary<LoadedPowerPlant, PowerPlant> powerPlantsToStart)
+        {
+            foreach (var powerPlant in powerPlantByLoadedPowerPlant)
             {
-                var sumOfAppliedLoad = 0m;
+                powerPlantsToStart.TryAdd(powerPlant.Key, powerPlant.Value);
+            }
+        }
 
-                // Apply most efficient powerplants first
-                foreach (KeyValuePair<LoadedPowerPlant, PowerPlant> item in loadedPowerPlantByPowerPlant)
+        private static void RampingUpMostEfficientPowerPlantsFirst(ProductionPlan productionPlan, Dictionary<LoadedPowerPlant, PowerPlant> powerPlantsToStart)
+        {
+            foreach (var powerplant in powerPlantsToStart)
+            {
+                var nettoPMin = powerplant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMin);
+                var nettoPMax = powerplant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMax);
+                var sumOfAppliedLoad = GetSumOfAppliedLoad(powerPlantsToStart);
+
+                if (sumOfAppliedLoad == productionPlan.Load)
+                    break;
+                else if (sumOfAppliedLoad + nettoPMax <= productionPlan.Load)
+                    powerplant.Key.PowerDelivery = nettoPMax;
+                else if (productionPlan.Load - sumOfAppliedLoad <= nettoPMax - nettoPMin)
+                    powerplant.Key.PowerDelivery += productionPlan.Load - sumOfAppliedLoad;
+            }
+        }
+
+        private static void ApplyMinPower(ProductionPlan productionPlan, Dictionary<LoadedPowerPlant, PowerPlant> powerPlantsToStart)
+        {
+            foreach (var powerplant in powerPlantsToStart)
+            {
+                var nettoPMin = powerplant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMin);
+                powerplant.Key.PowerDelivery = nettoPMin;
+            }
+        }
+
+        private static Dictionary<LoadedPowerPlant, PowerPlant> FindPowerPlantsToStart(ProductionPlan productionPlan, Dictionary<LoadedPowerPlant, PowerPlant> powerPlantByLoadedPowerPlant)
+        {
+            // Som min power < Load < Som max power
+            var powerPlantsToStart = new Dictionary<LoadedPowerPlant, PowerPlant>();
+
+            for (int i = 0; i < powerPlantByLoadedPowerPlant.Count; i++)
+            {
+                decimal somMinPower = 0m;
+                decimal somMaxPower = 0m;
+
+                powerPlantsToStart = [];
+
+                for (int j = i; j < powerPlantByLoadedPowerPlant.Count; j++)
                 {
-                    sumOfAppliedLoad = GetSumOfAppliedLoad(loadedPowerPlantByPowerPlant);
-                    if (sumOfAppliedLoad >= productionPlan.Load)
+                    var powerPlant = powerPlantByLoadedPowerPlant.ElementAt(j);
+                    powerPlantsToStart.Add(powerPlant.Key, powerPlant.Value);
+
+                    var pMinNetto = powerPlant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMin);
+                    var pMaxNetto = powerPlant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMax);
+
+                    somMinPower += pMinNetto;
+                    somMaxPower += pMaxNetto;
+
+                    // Found it!
+                    if (somMinPower < productionPlan.Load
+                        && productionPlan.Load < somMaxPower)
+                    {
                         break;
+                    }
 
-                    var nettoPMin = item.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMin);
-                    var nettoPMax = item.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMax);
+                    // Not yet...
+                    if (somMinPower < productionPlan.Load
+                        && productionPlan.Load > somMaxPower)
+                    {
+                        somMinPower += pMinNetto;
+                        somMaxPower += pMaxNetto;
 
-                    // Apply max powerplant power
-                    if (sumOfAppliedLoad + nettoPMax <= productionPlan.Load)
-                        item.Key.PowerDelivery += nettoPMax;
-                    // Apply partial powerplant power
-                    else if (sumOfAppliedLoad + nettoPMin <= productionPlan.Load
-                        && sumOfAppliedLoad + nettoPMax >= productionPlan.Load)
-                        item.Key.PowerDelivery = productionPlan.Load - sumOfAppliedLoad;
-                    // Apply more due to high PMin
-                    else if(sumOfAppliedLoad + nettoPMin <= productionPlan.Load)
-                        item.Key.PowerDelivery += nettoPMin;
+                        continue;
+                    }
+
+                    // Not possible, som of min power to high :(
+                    if (somMinPower > productionPlan.Load
+                        && productionPlan.Load < somMaxPower)
+                    {
+                        powerPlantsToStart.Clear();
+                        break;
+                    }
                 }
 
-                // Apply rest load
-
-
+                if (powerPlantsToStart is not null)
+                    break;
             }
 
-            return Result<LoadedPowerPlant[]>.Success(
-                [
-                    .. loadedPowerPlantByPowerPlant
-                        .Select(p => p.Key)
-                        //.OrderByDescending(p => p.PowerDelivery)
-                ]);
+            return powerPlantsToStart!;
         }
 
         private static decimal GetSumOfAppliedLoad(Dictionary<LoadedPowerPlant, PowerPlant> loadedPowerPlantByPowerPlant)
