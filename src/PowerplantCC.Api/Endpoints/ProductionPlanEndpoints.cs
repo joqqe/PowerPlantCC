@@ -11,7 +11,7 @@ namespace PowerplantCC.Api.Endpoints
                 var result = PowerDistributionCalculator.Invoke(productionPlan);
 
                 if (!result.IsSuccess)
-                    return Results.BadRequest(result.Exception!.Message);
+                    return Results.BadRequest(result.Exception?.Message ?? string.Empty);
 
                 if (result?.Value?.Length is null or 0)
                     return Results.NoContent();
