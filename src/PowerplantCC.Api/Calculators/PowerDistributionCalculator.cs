@@ -21,7 +21,7 @@ namespace PowerplantCC.Api.Calculators
                 .OrderByDescending(p => p.GetUnitEfficiency(productionPlan.Fuels))
                 .ToDictionary<PowerPlant, LoadedPowerPlant>(p => new LoadedPowerPlant(p.Name));
 
-            // Find PowerPlant to start
+            // Find PowerPlants to start
             var powerPlantsToStart = FindPowerPlantsToStart(productionPlan, powerPlantByLoadedPowerPlant);
 
             if (powerPlantsToStart?.Count is null or 0)
@@ -75,7 +75,7 @@ namespace PowerplantCC.Api.Calculators
                         continue;
                     }
 
-                    // Not possible, som of min power to high :(
+                    // Not possible, sum of min power to high :(
                     if (sumMinPower > productionPlan.Load
                         && productionPlan.Load < sumMaxPower)
                     {
