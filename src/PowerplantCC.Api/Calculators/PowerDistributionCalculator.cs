@@ -42,7 +42,7 @@ namespace PowerplantCC.Api.Calculators
 
         private static Dictionary<LoadedPowerPlant, PowerPlant> FindPowerPlantsToStart(ProductionPlan productionPlan, Dictionary<LoadedPowerPlant, PowerPlant> powerPlantByLoadedPowerPlant)
         {
-            // Som min power < Load < Som max power
+            // Sum min power < Load < Sum max power
             var powerPlantsToStart = new Dictionary<LoadedPowerPlant, PowerPlant>();
 
             for (int i = 0; i < powerPlantByLoadedPowerPlant.Count; i++)
