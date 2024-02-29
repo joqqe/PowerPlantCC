@@ -47,8 +47,8 @@ namespace PowerplantCC.Api.Calculators
 
             for (int i = 0; i < powerPlantByLoadedPowerPlant.Count; i++)
             {
-                decimal somMinPower = 0m;
-                decimal somMaxPower = 0m;
+                decimal sumMinPower = 0m;
+                decimal sumMaxPower = 0m;
 
                 powerPlantsToStart = [];
 
@@ -56,28 +56,28 @@ namespace PowerplantCC.Api.Calculators
                 {
                     var powerPlant = powerPlantByLoadedPowerPlant.ElementAt(j);
 
-                    somMinPower += powerPlant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMin);
-                    somMaxPower += powerPlant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMax);
+                    sumMinPower += powerPlant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMin);
+                    sumMaxPower += powerPlant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMax);
 
                     // Found it!
-                    if (somMinPower < productionPlan.Load
-                        && productionPlan.Load < somMaxPower)
+                    if (sumMinPower < productionPlan.Load
+                        && productionPlan.Load < sumMaxPower)
                     {
                         powerPlantsToStart.Add(powerPlant.Key, powerPlant.Value);
                         break;
                     }
 
                     // Not yet...
-                    if (somMinPower < productionPlan.Load
-                        && productionPlan.Load > somMaxPower)
+                    if (sumMinPower < productionPlan.Load
+                        && productionPlan.Load > sumMaxPower)
                     {
                         powerPlantsToStart.Add(powerPlant.Key, powerPlant.Value);
                         continue;
                     }
 
                     // Not possible, som of min power to high :(
-                    if (somMinPower > productionPlan.Load
-                        && productionPlan.Load < somMaxPower)
+                    if (sumMinPower > productionPlan.Load
+                        && productionPlan.Load < sumMaxPower)
                     {
                         powerPlantsToStart.Clear();
                         break;
@@ -89,6 +89,14 @@ namespace PowerplantCC.Api.Calculators
             }
 
             return powerPlantsToStart!;
+        }
+
+        private static void ApplyMinPower(ProductionPlan productionPlan, Dictionary<LoadedPowerPlant, PowerPlant> powerPlantsToStart)
+        {
+            foreach (var powerplant in powerPlantsToStart)
+            {
+                powerplant.Key.PowerDelivery = powerplant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMin);
+            }
         }
 
         private static void RampingUpMostEfficientPowerPlantsFirst(ProductionPlan productionPlan, Dictionary<LoadedPowerPlant, PowerPlant> powerPlantsToStart)
@@ -105,14 +113,6 @@ namespace PowerplantCC.Api.Calculators
                     powerplant.Key.PowerDelivery = nettoPMax;
                 else if (productionPlan.Load - sumOfAppliedLoad <= nettoPMax - nettoPMin)
                     powerplant.Key.PowerDelivery += productionPlan.Load - sumOfAppliedLoad;
-            }
-        }
-
-        private static void ApplyMinPower(ProductionPlan productionPlan, Dictionary<LoadedPowerPlant, PowerPlant> powerPlantsToStart)
-        {
-            foreach (var powerplant in powerPlantsToStart)
-            {
-                powerplant.Key.PowerDelivery = powerplant.Value.GetNettoLoad(productionPlan.Fuels, p => p.PMin);
             }
         }
 
