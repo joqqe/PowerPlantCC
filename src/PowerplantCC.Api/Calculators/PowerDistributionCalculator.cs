@@ -16,7 +16,7 @@ namespace PowerplantCC.Api.Calculators
             if (!validateResult.IsSuccess)
                 return Result<LoadedPowerPlant[]>.Error(validateResult.Exception!);
 
-            // Get unit efficiency
+            // Get ordered powerplants by unit efficiency. (Most efficient first)
             var powerPlantByLoadedPowerPlant = productionPlan.PowerPlants
                 .OrderByDescending(p => p.GetUnitEfficiency(productionPlan.Fuels))
                 .ToDictionary<PowerPlant, LoadedPowerPlant>(p => new LoadedPowerPlant(p.Name));
@@ -26,7 +26,7 @@ namespace PowerplantCC.Api.Calculators
 
             if (powerPlantsToStart?.Count is null or 0)
                 return Result<LoadedPowerPlant[]>.Error(
-                    new Exception("No combination of the power plants will result in the production of the required load."));
+                    new Exception("No combination of power plants will result in the production of the required load."));
 
             // Apply min power to all powerplants to start
             ApplyMinPower(productionPlan, powerPlantsToStart);
